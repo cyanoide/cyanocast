@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Cyanocast Admin</title>
-<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/svg+xml" href="favicon.svg?v=2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
@@ -94,7 +94,7 @@
   #logout:hover:not(:disabled) { border-color: var(--accent); background: var(--item-hover); box-shadow: 0 0 12px var(--accent-glow); filter: none; }
   .brand-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   #logo { width: 84px; height: 84px; flex: none; overflow: visible; --px: 256px; --py: 231.64px; --rec: #ff2d3d; }
-  #logo .lg-lo, #logo .lg-star, #logo .lg-kick { transform-origin: var(--px) var(--py); }
+  #logo .lg-lo, #logo .lg-star, #logo .lg-kick { transform-box: view-box; transform-origin: var(--px) var(--py); }
   #logo .lg-star { fill: var(--rec); transform: scale(0); animation: lg-pop .7s cubic-bezier(.34,1.56,.64,1) forwards; }
   #logo .lg-kick { animation: lg-kick .3s ease-out .9s 5; }
   #logo .lg-lo { fill: var(--text); transform: scale(0); animation: lg-bloom .95s linear calc(.9s + var(--i) * .3s) forwards; }
@@ -328,7 +328,7 @@ sb.auth.getSession().then(({ data }) => applySession(data.session));
 
 // Logo : fleur qui s'ouvre, tenue 10 s, se referme à l'envers, pause 5 s, puis on recommence.
 (function loopLogo() {
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches || !$("logo").getAnimations) return;
   const HOLD = 10000, PAUSE = 5000;
   requestAnimationFrame(() => {
     const anims = $("logo").getAnimations({ subtree: true });
@@ -346,6 +346,39 @@ sb.auth.getSession().then(({ data }) => applySession(data.session));
       requestAnimationFrame(tick);
     })(t0);
   });
+})();
+
+// Favicon : même fleur noire, étoile rouge qui s'éteint et se rallume (voyant REC).
+// Rendue en PNG via un canvas : fonctionne aussi sur Safari, qui ignore les favicons SVG.
+(function animatedFavicon() {
+  const g = document.createElement("canvas").getContext("2d");
+  if (!g || !window.Path2D) return;
+  g.canvas.width = g.canvas.height = 64;
+  const diamonds = [...document.querySelectorAll("#logo .lg-lo")].map((p) => new Path2D(p.getAttribute("d")));
+  const star = new Path2D(document.querySelector("#logo .lg-star").getAttribute("d"));
+  const frame = (alpha) => {
+    g.clearRect(0, 0, 64, 64);
+    g.save();
+    g.scale(64 / 512, 64 / 512);
+    g.fillStyle = "#0a0a0a";
+    diamonds.forEach((d) => g.fill(d));
+    g.globalAlpha = alpha;
+    g.fillStyle = "#ff2d3d";
+    g.fill(star);
+    g.restore();
+    const link = document.createElement("link");
+    link.rel = "icon";
+    link.type = "image/png";
+    link.href = g.canvas.toDataURL("image/png");
+    document.querySelectorAll('link[rel~="icon"]').forEach((l) => l.remove());
+    document.head.appendChild(link);
+  };
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return frame(1);
+  const t0 = performance.now();
+  setInterval(() => {
+    const phase = ((performance.now() - t0) % 2000) / 2000;
+    frame(0.1 + 0.9 * (0.5 + 0.5 * Math.cos(2 * Math.PI * phase)));
+  }, 100);
 })();
 </script>
 </body>
