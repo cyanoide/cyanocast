@@ -1,0 +1,5 @@
+project_id = "cyanocast"
+
+[functions.feed]
+# Spotify et Apple relisent le flux sans authentification
+verify_jwt = false

@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Cyanocast Admin</title>
+<style>
+  :root { color-scheme: light dark; --gap: 14px; }
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 1.4rem; margin: 0 0 20px; }
+  form { display: grid; gap: var(--gap); }
+  label { display: grid; gap: 4px; font-weight: 600; font-size: .9rem; }
+  input, textarea, button { font: inherit; padding: 10px; border-radius: 8px; border: 1px solid #8886; }
+  textarea { min-height: 110px; resize: vertical; }
+  button { cursor: pointer; font-weight: 600; background: #2563eb; color: #fff; border: 0; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.link { background: none; color: inherit; font-weight: 400; text-decoration: underline; padding: 0; border: 0; justify-self: start; }
+  #status { min-height: 1.5em; font-size: .95rem; }
+  .ok { color: #16a34a; } .err { color: #dc2626; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<h1>Cyanocast</h1>
+
+<form id="login" hidden>
+  <label>E-mail <input id="email" type="email" autocomplete="username" required></label>
+  <label>Mot de passe <input id="password" type="password" autocomplete="current-password" required></label>
+  <button>Se connecter</button>
+</form>
+
+<form id="publish" hidden>
+  <label>Fichier audio (mp3) <input id="audio" type="file" accept="audio/mpeg,.mp3" required></label>
+  <label>Titre <input id="title" required></label>
+  <label>Description <textarea id="description"></textarea></label>
+  <label>Numéro d'épisode (optionnel) <input id="number" type="number" min="1"></label>
+  <label>Image de l'épisode, carrée (optionnel) <input id="cover" type="file" accept="image/jpeg,image/png"></label>
+  <button id="submit">Publier</button>
+  <button type="button" class="link" id="logout">Se déconnecter</button>
+</form>
+
+<p id="status" role="status"></p>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+const SUPABASE_URL = "https://sanopnzbhcrnqkxwulrs.supabase.co";
+// Clé publique (anon) : sans danger dans un dépôt public, la sécurité repose sur les règles RLS.
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhbm9wbnpiaGNybnFreHd1bHJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMzNDIxNTEsImV4cCI6MjEwODkxODE1MX0.sl3F0ReIZZhXql0bLNbrEusV3BjI2uq852SikvSJSjc";
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const $ = (id) => document.getElementById(id);
+
+function say(msg, cls = "") { const s = $("status"); s.textContent = msg; s.className = cls; }
+
+function show(session) {
+  $("login").hidden = !!session;
+  $("publish").hidden = !session;
+}
+
+function slug(s) {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "episode";
+}
+
+function audioDuration(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const a = new Audio();
+    a.preload = "metadata";
+    a.onloadedmetadata = () => { URL.revokeObjectURL(url); resolve(Math.round(a.duration)); };
+    a.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Impossible de lire la durée du fichier")); };
+    a.src = url;
+  });
+}
+
+async function upload(bucket, path, file) {
+  const { error } = await sb.storage.from(bucket).upload(path, file, { contentType: file.type, upsert: false });
+  if (error) throw error;
+  return sb.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+}
+
+$("login").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  say("Connexion…");
+  const { error } = await sb.auth.signInWithPassword({ email: $("email").value, password: $("password").value });
+  if (error) return say("Connexion refusée : " + error.message, "err");
+  say("");
+});
+
+$("logout").addEventListener("click", () => sb.auth.signOut());
+
+$("publish").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = $("submit");
+  btn.disabled = true;
+  const uploaded = [];
+  try {
+    const audio = $("audio").files[0];
+    const cover = $("cover").files[0];
+    const title = $("title").value.trim();
+    const stamp = new Date().toISOString().slice(0, 10);
+    const base = `${stamp}-${slug(title)}-${Date.now().toString(36)}`;
+
+    say("Lecture de la durée…");
+    const duration = await audioDuration(audio);
+
+    say("Envoi de l'audio…");
+    const audioPath = `${base}.mp3`;
+    const audioUrl = await upload("audio", audioPath, audio);
+    uploaded.push(["audio", audioPath]);
+
+    let imageUrl = null;
+    if (cover) {
+      say("Envoi de l'image…");
+      const ext = cover.type === "image/png" ? "png" : "jpg";
+      const imagePath = `${base}.${ext}`;
+      imageUrl = await upload("images", imagePath, cover);
+      uploaded.push(["images", imagePath]);
+    }
+
+    say("Publication…");
+    const { error } = await sb.from("episodes").insert({
+      title,
+      description: $("description").value.trim(),
+      audio_url: audioUrl,
+      audio_bytes: audio.size,
+      audio_type: "audio/mpeg",
+      duration_seconds: duration,
+      image_url: imageUrl,
+      episode_number: $("number").value ? Number($("number").value) : null,
+    });
+    if (error) throw error;
+
+    say("Épisode publié. Il sera dans le flux RSS d'ici quelques minutes.", "ok");
+    $("publish").reset();
+  } catch (err) {
+    for (const [bucket, path] of uploaded) await sb.storage.from(bucket).remove([path]);
+    say("Erreur : " + (err.message || err), "err");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+sb.auth.onAuthStateChange((_event, session) => show(session));
+sb.auth.getSession().then(({ data }) => show(data.session));
+</script>
+</body>
+</html>
