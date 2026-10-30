@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Cyanocast Admin</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
@@ -85,6 +86,28 @@
   }
   .panel-header { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
   .header-line { height: 1px; background: linear-gradient(90deg, var(--accent), transparent); opacity: .45; }
+  .brand { display: flex; align-items: center; gap: 16px; }
+  .brand-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  #logo { width: 84px; height: 84px; flex: none; overflow: visible; --px: 256px; --py: 231.64px; --rec: #ff2d3d; }
+  #logo .lg-lo, #logo .lg-star, #logo .lg-kick { transform-origin: var(--px) var(--py); }
+  #logo .lg-star { fill: var(--rec); transform: scale(0); animation: lg-pop .7s cubic-bezier(.34,1.56,.64,1) forwards; }
+  #logo .lg-kick { animation: lg-kick .3s ease-out .9s 5; }
+  #logo .lg-lo { fill: var(--text); transform: scale(0); animation: lg-bloom .95s linear calc(.9s + var(--i) * .3s) forwards; }
+  /* Pendant la tenue de 10 s : l'étoile s'éteint et se rallume (voyant REC), 5 cycles de 2 s pour finir allumée */
+  #logo.rec .lg-rec { animation: lg-rec 2s ease-in-out infinite; }
+  @keyframes lg-rec { 0%, 100% { opacity: 1; } 50% { opacity: .1; } }
+  @keyframes lg-pop { from { transform: scale(0) rotate(-72deg); } to { transform: scale(1) rotate(0); } }
+  @keyframes lg-kick { 0% { transform: scale(1); } 25% { transform: scale(1.1); } 100% { transform: scale(1); } }
+  @keyframes lg-bloom {
+    0%   { transform: scale(0);    animation-timing-function: cubic-bezier(.2,.8,.3,1); }
+    45%  { transform: scale(1.16); animation-timing-function: ease-in-out; }
+    68%  { transform: scale(.93);  animation-timing-function: ease-in-out; }
+    85%  { transform: scale(1.03); animation-timing-function: ease-in-out; }
+    100% { transform: scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #logo .lg-lo, #logo .lg-star, #logo .lg-kick { animation: none; transform: none; }
+  }
   h1 { font-size: 24px; font-weight: 600; letter-spacing: 6px; text-transform: uppercase; color: var(--accent); }
   .header-sub { font-family: var(--font-mono); font-size: 10px; letter-spacing: 4px; text-transform: uppercase; color: var(--muted); }
 
@@ -136,12 +159,24 @@
 <main id="panel">
   <div class="panel-header">
     <div class="header-line"></div>
-    <h1>Cyanocast</h1>
-    <div class="header-sub">Console de publication</div>
+    <div class="brand">
+      <svg id="logo" viewBox="0 0 512 512" role="img" aria-label="Logo CYANOIDE">
+        <path class="lg-lo" style="--i:0" d="M 256.00,284.04 L 314.20,385.54 L 256.00,486.74 L 197.80,385.54 Z"/>
+        <path class="lg-lo" style="--i:1" d="M 206.16,247.83 L 127.62,334.55 L 13.39,310.47 L 91.65,223.85 Z"/>
+        <path class="lg-lo" style="--i:2" d="M 225.20,189.25 L 118.46,141.34 L 106.06,25.26 L 212.62,72.92 Z"/>
+        <path class="lg-lo" style="--i:3" d="M 286.80,189.25 L 299.38,72.92 L 405.94,25.26 L 393.54,141.34 Z"/>
+        <path class="lg-lo" style="--i:4" d="M 305.84,247.83 L 420.35,223.85 L 498.61,310.47 L 384.38,334.55 Z"/>
+        <g class="lg-rec"><g class="lg-kick"><path class="lg-star" d="M 256.00,135.54 L 278.28,200.98 L 347.40,201.94 L 292.05,243.35 L 312.49,309.39 L 256.00,269.54 L 199.51,309.39 L 219.95,243.35 L 164.60,201.94 L 233.72,200.98 Z"/></g></g>
+      </svg>
+      <div class="brand-text">
+        <h1>Cyanocast</h1>
+        <div class="header-sub">Console de publication</div>
+      </div>
+    </div>
     <div class="header-line"></div>
   </div>
 <form id="login" hidden>
-  <label>E-mail <input id="email" type="email" autocomplete="username" required></label>
+  <label>Nom d'utilisateur <input id="pseudo" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
   <label>Mot de passe <input id="password" type="password" autocomplete="current-password" required></label>
   <button>Se connecter</button>
 </form>
@@ -200,9 +235,20 @@ async function upload(bucket, path, file) {
 $("login").addEventListener("submit", async (e) => {
   e.preventDefault();
   say("Connexion…");
-  const { error } = await sb.auth.signInWithPassword({ email: $("email").value, password: $("password").value });
-  if (error) return say("Connexion refusée : " + error.message, "err");
-  say("");
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/admin-login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pseudo: $("pseudo").value, password: $("password").value }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return say(body.error || "Connexion refusée", "err");
+    const { error } = await sb.auth.setSession({ access_token: body.access_token, refresh_token: body.refresh_token });
+    if (error) throw error;
+    say("");
+  } catch (err) {
+    say("Connexion refusée : " + (err.message || err), "err");
+  }
 });
 
 $("logout").addEventListener("click", () => sb.auth.signOut());
@@ -259,8 +305,42 @@ $("publish").addEventListener("submit", async (e) => {
   }
 });
 
-sb.auth.onAuthStateChange((_event, session) => show(session));
-sb.auth.getSession().then(({ data }) => show(data.session));
+async function applySession(session) {
+  if (!session) return show(null);
+  const { data } = await sb.from("profiles").select("role").eq("id", session.user.id).maybeSingle();
+  if (data?.role !== "admin") {
+    await sb.auth.signOut();
+    say("Ce compte n'a pas le statut admin.", "err");
+    return show(null);
+  }
+  show(session);
+}
+
+// Hors du callback : supabase-js ne permet pas d'appeler l'API depuis onAuthStateChange
+sb.auth.onAuthStateChange((_event, session) => setTimeout(() => applySession(session), 0));
+sb.auth.getSession().then(({ data }) => applySession(data.session));
+
+// Logo : fleur qui s'ouvre, tenue 10 s, se referme à l'envers, pause 5 s, puis on recommence.
+(function loopLogo() {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const HOLD = 10000, PAUSE = 5000;
+  requestAnimationFrame(() => {
+    const anims = $("logo").getAnimations({ subtree: true });
+    if (!anims.length) return;
+    anims.forEach((a) => a.pause());
+    const F = Math.max(...anims.map((a) => a.effect.getComputedTiming().endTime));
+    const cycle = 2 * F + HOLD + PAUSE;
+    const t0 = performance.now();
+    let last = -1;
+    (function tick(now) {
+      const c = (now - t0) % cycle;
+      const t = c < F ? c : c < F + HOLD ? F : c < 2 * F + HOLD ? F - (c - F - HOLD) : 0;
+      if (t !== last) { anims.forEach((a) => (a.currentTime = t)); last = t; }
+      $("logo").classList.toggle("rec", c >= F && c < F + HOLD);
+      requestAnimationFrame(tick);
+    })(t0);
+  });
+})();
 </script>
 </body>
 </html>

@@ -3,3 +3,7 @@ project_id = "cyanocast"
 [functions.feed]
 # Spotify et Apple relisent le flux sans authentification
 verify_jwt = false
+
+[functions.admin-login]
+# Fonction publique : elle vérifie elle-même pseudo, mot de passe et rôle admin
+verify_jwt = false
