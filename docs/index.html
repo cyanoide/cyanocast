@@ -87,6 +87,11 @@
   .panel-header { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
   .header-line { height: 1px; background: linear-gradient(90deg, var(--accent), transparent); opacity: .45; }
   .brand { display: flex; align-items: center; gap: 16px; }
+  /* Bouton d'arrêt (déconnexion) : même gabarit que la roue dentée de CameraMap */
+  #logout { flex: none; margin-left: auto; width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center;
+    color: var(--accent); background: transparent; border: 1px solid var(--border); border-radius: 2px; box-shadow: none; transition: .15s ease; }
+  #logout .ico { display: block; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.2; stroke-linejoin: round; }
+  #logout:hover:not(:disabled) { border-color: var(--accent); background: var(--item-hover); box-shadow: 0 0 12px var(--accent-glow); filter: none; }
   .brand-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   #logo { width: 84px; height: 84px; flex: none; overflow: visible; --px: 256px; --py: 231.64px; --rec: #ff2d3d; }
   #logo .lg-lo, #logo .lg-star, #logo .lg-kick { transform-origin: var(--px) var(--py); }
@@ -172,6 +177,7 @@
         <h1>Cyanocast</h1>
         <div class="header-sub">Console de publication</div>
       </div>
+      <button type="button" id="logout" title="Se déconnecter" aria-label="Se déconnecter" hidden><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9"/></svg></button>
     </div>
     <div class="header-line"></div>
   </div>
@@ -188,7 +194,6 @@
   <label>Numéro d'épisode (optionnel) <input id="number" type="number" min="1"></label>
   <label>Image de l'épisode, carrée (optionnel) <input id="cover" type="file" accept="image/jpeg,image/png"></label>
   <button id="submit">Publier</button>
-  <button type="button" class="link" id="logout">Se déconnecter</button>
 </form>
 
   <p id="status" role="status"></p>
@@ -208,6 +213,7 @@ function say(msg, cls = "") { const s = $("status"); s.textContent = msg; s.clas
 function show(session) {
   $("login").hidden = !!session;
   $("publish").hidden = !session;
+  $("logout").hidden = !session;
 }
 
 function slug(s) {
